@@ -452,3 +452,6 @@ init(Handle<Object> target)
 {
   kinect::Initialize(target);
 }
+
+NODE_MODULE(kinect, init)
+
