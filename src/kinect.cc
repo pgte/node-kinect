@@ -23,58 +23,19 @@ using namespace v8;
 
 namespace
 {
-    Persistent<String> depthCallbackSymbol;
-    Persistent<String> videoCallbackSymbol;
+    v8::Persistent<v8::String> depthCallbackSymbol;
+    v8::Persistent<v8::String> videoCallbackSymbol;
 
-    kinect::Context *get_kinect_context(uv_async_t *const handle)
-    {
-        auto const context = static_cast<kinect::Context *>(handle->data);
-        assert(context != nullptr);
-        return context;
-    }
+    void video_callback(freenect_device *, void *, uint32_t);
+    void async_video_callback(uv_async_t *, int);
 
-    kinect::Context *get_kinect_context(freenect_device *const device)
-    {
-        auto const context = static_cast<kinect::Context *>(
-                freenect_get_user(device));
-        assert(context != nullptr);
-        return context;
-    }
+    void depth_callback(freenect_device *, void *, uint32_t);
+    void async_depth_callback(uv_async_t *, int);
 
-    void async_video_callback(uv_async_t *handle, int notUsed)
-    {
-        auto const context = get_kinect_context(handle);
-        context->VideoCallback();
-    }
+    kinect::Context *get_kinect_context(uv_async_t *);
+    kinect::Context *get_kinect_context(freenect_device *);
 
-    void video_callback(freenect_device *dev, void *video, uint32_t timestamp)
-    {
-        auto const context = get_kinect_context(dev);
-        if (context->sending_)
-            return;
-        context->uv_async_video_callback_.data = (void *) context;
-        uv_async_send(&context->uv_async_video_callback_);
-    }
-
-    void async_depth_callback(uv_async_t *handle, int notUsed)
-    {
-        auto const context = get_kinect_context(handle);
-        if (context->sending_)
-            return;
-        context->DepthCallback();
-    }
-
-    void depth_callback(freenect_device *dev, void *depth, uint32_t timestamp)
-    {
-        auto const context = get_kinect_context(dev);
-        context->uv_async_depth_callback_.data = (void *) context;
-        uv_async_send(&context->uv_async_depth_callback_);
-    }
-
-    void throw_message(char const *const message)
-    {
-        ThrowException(Exception::Error(String::New(message)));
-    }
+    void throw_message(char const *);
 }
 
 
@@ -453,6 +414,61 @@ namespace kinect {
   }
 
 }
+
+
+namespace
+{
+    kinect::Context *get_kinect_context(uv_async_t *const handle)
+    {
+        auto const context = static_cast<kinect::Context *>(handle->data);
+        assert(context != nullptr);
+        return context;
+    }
+
+    kinect::Context *get_kinect_context(freenect_device *const device)
+    {
+        auto const context = static_cast<kinect::Context *>(
+                freenect_get_user(device));
+        assert(context != nullptr);
+        return context;
+    }
+
+    void async_video_callback(uv_async_t *handle, int notUsed)
+    {
+        auto const context = get_kinect_context(handle);
+        context->VideoCallback();
+    }
+
+    void video_callback(freenect_device *dev, void *video, uint32_t timestamp)
+    {
+        auto const context = get_kinect_context(dev);
+        if (context->sending_)
+            return;
+        context->uv_async_video_callback_.data = (void *) context;
+        uv_async_send(&context->uv_async_video_callback_);
+    }
+
+    void async_depth_callback(uv_async_t *handle, int notUsed)
+    {
+        auto const context = get_kinect_context(handle);
+        if (context->sending_)
+            return;
+        context->DepthCallback();
+    }
+
+    void depth_callback(freenect_device *dev, void *depth, uint32_t timestamp)
+    {
+        auto const context = get_kinect_context(dev);
+        context->uv_async_depth_callback_.data = (void *) context;
+        uv_async_send(&context->uv_async_depth_callback_);
+    }
+
+    void throw_message(char const *const message)
+    {
+        ThrowException(Exception::Error(String::New(message)));
+    }
+}
+
 
 extern "C" void
 init(Handle<Object> target)
