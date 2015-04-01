@@ -14,7 +14,6 @@ extern "C" {
 #include <stdio.h>
 #include <stdexcept>
 #include <string>
-//#include <iostream>
 
 #include "kinect.h"
 
@@ -312,7 +311,6 @@ namespace kinect {
 
     String::AsciiValue val(args[0]->ToString());
     GetContext(args)->Led(std::string(*val));
-    //GetContext(args)->Led(std::string("green"));
     return Undefined();
   }
 
