@@ -16,6 +16,8 @@ extern "C" {
 #include <string>
 //#include <iostream>
 
+#include "kinect.h"
+
 using namespace node;
 using namespace v8;
 
@@ -23,61 +25,6 @@ namespace kinect {
 
   static Persistent<String> depthCallbackSymbol;
   static Persistent<String> videoCallbackSymbol;
-
-  class Context : ObjectWrap {
-    public:
-      static void            Initialize (v8::Handle<v8::Object> target);
-      virtual                ~Context   ();
-      void                   DepthCallback    ();
-      void                   VideoCallback    ();
-      bool                   running_;
-      bool                   sending_;
-      freenect_context*      context_;
-      uv_async_t             uv_async_video_callback_;
-      uv_async_t             uv_async_depth_callback_;
-
-    private:
-      Context(int user_device_number);
-      static Handle<Value>  New              (const Arguments& args);
-      static Context*       GetContext       (const Arguments &args);
-
-      void                  Close            ();
-      static Handle<Value>  Close            (const Arguments &args);
-
-      void                  Led              (const std::string option);
-      static Handle<Value>  Led              (const Arguments &args);
-
-      void                  Tilt             (const double angle);
-      static Handle<Value>  Tilt             (const Arguments &args);
-
-      void                  SetDepthCallback ();
-      static Handle<Value>  SetDepthCallback (const Arguments &args);
-
-      void                  SetVideoCallback ();
-      static Handle<Value>  SetVideoCallback (const Arguments &args);
-
-      void                  Pause            ();
-      static Handle<Value>  Pause            (const Arguments &args);
-
-      void                  Resume           ();
-      static Handle<Value>  Resume           (const Arguments &args);
-
-      void                  InitProcessEventThread();
-
-      bool                  depthCallback_;
-      bool                  videoCallback_;
-      Buffer*               videoBuffer_;
-      Handle<Value>         videoBufferPersistentHandle_;
-      Buffer*               depthBuffer_;
-      Handle<Value>         depthBufferPersistentHandle_;
-
-      freenect_device*      device_;
-      freenect_frame_mode   videoMode_;
-      freenect_frame_mode   depthMode_;
-
-      uv_thread_t           event_thread_;
-
-  };
 
   Context *
   Context::GetContext(const Arguments &args) {
