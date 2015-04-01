@@ -38,13 +38,13 @@ namespace
     {
         auto const context = static_cast<kinect::Context *>(
                 freenect_get_user(device));
+        assert(context != nullptr);
         return context;
     }
 
     void async_video_callback(uv_async_t *handle, int notUsed)
     {
         auto const context = get_kinect_context(handle);
-        assert(context != nullptr);
         context->VideoCallback();
     }
 
