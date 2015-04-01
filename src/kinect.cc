@@ -14,76 +14,32 @@ extern "C" {
 #include <stdio.h>
 #include <stdexcept>
 #include <string>
-//#include <iostream>
+
+#include "kinect.h"
 
 using namespace node;
 using namespace v8;
 
+
+namespace
+{
+    v8::Persistent<v8::String> depthCallbackSymbol;
+    v8::Persistent<v8::String> videoCallbackSymbol;
+
+    void video_callback(freenect_device *, void *, uint32_t);
+    void async_video_callback(uv_async_t *, int);
+
+    void depth_callback(freenect_device *, void *, uint32_t);
+    void async_depth_callback(uv_async_t *, int);
+
+    kinect::Context *get_kinect_context(uv_async_t *);
+    kinect::Context *get_kinect_context(freenect_device *);
+
+    void throw_message(char const *);
+}
+
+
 namespace kinect {
-
-  static Persistent<String> depthCallbackSymbol;
-  static Persistent<String> videoCallbackSymbol;
-
-  class Context : ObjectWrap {
-    public:
-      static void            Initialize (v8::Handle<v8::Object> target);
-      virtual                ~Context   ();
-      void                   DepthCallback    ();
-      void                   VideoCallback    ();
-      bool                   running_;
-      bool                   sending_;
-      freenect_context*      context_;
-      uv_async_t             uv_async_video_callback_;
-      uv_async_t             uv_async_depth_callback_;
-
-    private:
-      Context(int user_device_number);
-      static Handle<Value>  New              (const Arguments& args);
-      static Context*       GetContext       (const Arguments &args);
-
-      void                  Close            ();
-      static Handle<Value>  Close            (const Arguments &args);
-
-      void                  Led              (const std::string option);
-      static Handle<Value>  Led              (const Arguments &args);
-
-      void                  Tilt             (const double angle);
-      static Handle<Value>  Tilt             (const Arguments &args);
-
-      void                  SetDepthCallback ();
-      static Handle<Value>  SetDepthCallback (const Arguments &args);
-
-      void                  SetVideoCallback ();
-      static Handle<Value>  SetVideoCallback (const Arguments &args);
-
-      void                  Pause            ();
-      static Handle<Value>  Pause            (const Arguments &args);
-
-      void                  Resume           ();
-      static Handle<Value>  Resume           (const Arguments &args);
-
-      void                  InitProcessEventThread();
-
-      bool                  depthCallback_;
-      bool                  videoCallback_;
-      Buffer*               videoBuffer_;
-      Handle<Value>         videoBufferPersistentHandle_;
-      Buffer*               depthBuffer_;
-      Handle<Value>         depthBufferPersistentHandle_;
-
-      freenect_device*      device_;
-      freenect_frame_mode   videoMode_;
-      freenect_frame_mode   depthMode_;
-
-      uv_thread_t           event_thread_;
-
-  };
-
-  Context *
-  Context::GetContext(const Arguments &args) {
-    return ObjectWrap::Unwrap<Context>(args.This());
-  }
-
   /********************************/
   /********* Flow *****************/
   /********************************/
@@ -130,98 +86,75 @@ namespace kinect {
   }
 
 
-  /********************************/
-  /********* Video ****************/
-  /********************************/
+    // =====================================================================
+    // = Video                                                             =
+    // =====================================================================
 
-  static void
-  async_video_callback(uv_async_t *handle, int notUsed) {
-    Context * context = (Context *) handle->data;
-    assert(context != NULL);
-    context->VideoCallback();
-  }
-
-  static void
-  video_callback(freenect_device *dev, void *video, uint32_t timestamp) {
-    Context* context = (Context *) freenect_get_user(dev);
-    assert(context);
-    if (context->sending_) return;
-    context->uv_async_video_callback_.data = (void *) context;
-    uv_async_send(&context->uv_async_video_callback_);
-  }
-
-  void
-  Context::VideoCallback() {
-    sending_ = true;
-    assert(videoBuffer_ != NULL);
-
-    if (videoCallbackSymbol.IsEmpty()) {
-      videoCallbackSymbol = NODE_PSYMBOL("videoCallback");
-    }
-    Local<Value> callback_v =handle_->Get(videoCallbackSymbol);
-    if (!callback_v->IsFunction()) {
-      ThrowException(Exception::Error(String::New("VideoCallback should be a function")));
-    }
-    Local<Function> callback = Local<Function>::Cast(callback_v);
-
-    Handle<Value> argv[1] = { videoBuffer_->handle_ };
-    callback->Call(handle_, 1, argv);
-    sending_ = false;
-  }
-
-  void
-  Context::SetVideoCallback() {
-    if (!videoCallback_) {
-
-      freenect_set_video_callback(device_, video_callback);
-
-      videoCallback_ = true;
-      if (freenect_set_video_mode(device_, videoMode_) != 0) {
-        ThrowException(Exception::Error(String::New("Error setting Video mode")));
-        return;
-      };
-
-      videoBuffer_ = Buffer::New(videoMode_.bytes);
-      videoBufferPersistentHandle_ = Persistent<Value>::New(videoBuffer_->handle_);
-      if (freenect_set_video_buffer(device_, Buffer::Data(videoBuffer_)) != 0) {
-        ThrowException(Exception::Error(String::New("Error setting Video buffer")));
-      }
-
-
+    Handle<Value> Context::SetVideoCallback(Arguments const& args)
+    {
+        HandleScope scope;
+        GetContext(args)->SetVideoCallback();
+        return Undefined();
     }
 
-    if (freenect_start_video(device_) != 0) {
-      ThrowException(Exception::Error(String::New("Error starting video")));
-      return;
+    void Context::SetVideoCallback()
+    {
+        if (!videoCallback_)
+        {
+            freenect_set_video_callback(device_, video_callback);
+
+            videoCallback_ = true;
+            if (freenect_set_video_mode(device_, videoMode_) != 0)
+            {
+                throw_message("Error setting Video mode");
+                return;
+            }
+
+            videoBuffer_ = Buffer::New(videoMode_.bytes);
+            videoBufferPersistentHandle_ = Persistent<Value>::New(videoBuffer_->handle_);
+            if (freenect_set_video_buffer(device_, Buffer::Data(videoBuffer_)) != 0)
+            {
+                throw_message("Error setting Video buffer");
+            }
+
+        }
+
+        if (freenect_start_video(device_) != 0)
+        {
+            throw_message("Error starting video");
+            return;
+        }
     }
-  }
 
-  Handle<Value>
-  Context::SetVideoCallback(const Arguments& args) {
-    HandleScope scope;
+    void Context::VideoCallback()
+    {
+        sending_ = true;
+        assert(videoBuffer_ != nullptr);
 
-    GetContext(args)->SetVideoCallback();
+        if (videoCallbackSymbol.IsEmpty())
+        {
+            videoCallbackSymbol = NODE_PSYMBOL("videoCallback");
+        }
 
-    return Undefined();
-  }
+        Local<Value> callback_v =handle_->Get(videoCallbackSymbol);
+
+        if (!callback_v->IsFunction())
+        {
+            throw_message("VideoCallback should be a function");
+        }
+
+        Local<Function> callback = Local<Function>::Cast(callback_v);
+
+        Handle<Value> argv[1] = { videoBuffer_->handle_ };
+        callback->Call(handle_, 1, argv);
+        sending_ = false;
+    }
+
 
 
   /********* Depth ****************/
 
-  static void
-  async_depth_callback(uv_async_t *handle, int notUsed) {
-    Context * context = (Context *) handle->data;
-    assert(context);
-    if (context->sending_) return;
-    context->DepthCallback();
-  }
 
-  static void
-  depth_callback(freenect_device *dev, void *depth, uint32_t timestamp) {
-    Context* context = (Context *) freenect_get_user(dev);
-    context->uv_async_depth_callback_.data = (void *) context;
-    uv_async_send(&context->uv_async_depth_callback_);
-  }
 
   void
   Context::DepthCallback() {
@@ -304,17 +237,17 @@ namespace kinect {
   Context::Led(const std::string option) {
     freenect_led_options ledCode;
 
-    if (option.compare("off") == 0) {
+    if (option == "off") {
       ledCode = LED_OFF;
-    } else if (option.compare("green") == 0) {
+    } else if (option == "green") {
       ledCode = LED_GREEN;
-    } else if (option.compare("red") == 0) {
+    } else if (option == "red") {
       ledCode = LED_RED;
-    } else if (option.compare("yellow") == 0) {
+    } else if (option == "yellow") {
       ledCode = LED_YELLOW;
-    } else if (option.compare("blink green") == 0) {
+    } else if (option == "blink green") {
       ledCode = LED_BLINK_GREEN;
-    } else if (option.compare("blink red yellow") == 0) {
+    } else if (option == "blink red yellow") {
       ledCode = LED_BLINK_RED_YELLOW;
     } else {
       ThrowException(Exception::Error(String::New("Did not recognize given led code")));
@@ -342,7 +275,6 @@ namespace kinect {
 
     String::AsciiValue val(args[0]->ToString());
     GetContext(args)->Led(std::string(*val));
-    //GetContext(args)->Led(std::string("green"));
     return Undefined();
   }
 
@@ -470,12 +402,74 @@ namespace kinect {
     return Undefined();
    }
 
+    kinect::Context *Context::GetContext(Arguments const&args)
+    {
+        return ObjectWrap::Unwrap<kinect::Context>(args.This());
+    }
+
   void
   Initialize(Handle<Object> target) {
     Context::Initialize(target);
   }
 
+
+
 }
+
+
+namespace
+{
+    kinect::Context *get_kinect_context(uv_async_t *const handle)
+    {
+        auto const context = static_cast<kinect::Context *>(handle->data);
+        assert(context != nullptr);
+        return context;
+    }
+
+    kinect::Context *get_kinect_context(freenect_device *const device)
+    {
+        auto const context = static_cast<kinect::Context *>(
+                freenect_get_user(device));
+        assert(context != nullptr);
+        return context;
+    }
+
+    void async_video_callback(uv_async_t *handle, int notUsed)
+    {
+        auto const context = get_kinect_context(handle);
+        context->VideoCallback();
+    }
+
+    void video_callback(freenect_device *dev, void *video, uint32_t timestamp)
+    {
+        auto const context = get_kinect_context(dev);
+        if (context->sending_)
+            return;
+        context->uv_async_video_callback_.data = (void *) context;
+        uv_async_send(&context->uv_async_video_callback_);
+    }
+
+    void async_depth_callback(uv_async_t *handle, int notUsed)
+    {
+        auto const context = get_kinect_context(handle);
+        if (context->sending_)
+            return;
+        context->DepthCallback();
+    }
+
+    void depth_callback(freenect_device *dev, void *depth, uint32_t timestamp)
+    {
+        auto const context = get_kinect_context(dev);
+        context->uv_async_depth_callback_.data = (void *) context;
+        uv_async_send(&context->uv_async_depth_callback_);
+    }
+
+    void throw_message(char const *const message)
+    {
+        ThrowException(Exception::Error(String::New(message)));
+    }
+}
+
 
 extern "C" void
 init(Handle<Object> target)
