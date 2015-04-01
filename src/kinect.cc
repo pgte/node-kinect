@@ -70,6 +70,11 @@ namespace
         context->uv_async_depth_callback_.data = (void *) context;
         uv_async_send(&context->uv_async_depth_callback_);
     }
+
+    void throw_message(char const *const message)
+    {
+        ThrowException(Exception::Error(String::New(message)));
+    }
 }
 
 
@@ -126,66 +131,70 @@ namespace kinect {
   }
 
 
-  /********************************/
-  /********* Video ****************/
-  /********************************/
+    // =====================================================================
+    // = Video                                                             =
+    // =====================================================================
 
-
-
-  void
-  Context::VideoCallback() {
-    sending_ = true;
-    assert(videoBuffer_ != NULL);
-
-    if (videoCallbackSymbol.IsEmpty()) {
-      videoCallbackSymbol = NODE_PSYMBOL("videoCallback");
-    }
-    Local<Value> callback_v =handle_->Get(videoCallbackSymbol);
-    if (!callback_v->IsFunction()) {
-      ThrowException(Exception::Error(String::New("VideoCallback should be a function")));
-    }
-    Local<Function> callback = Local<Function>::Cast(callback_v);
-
-    Handle<Value> argv[1] = { videoBuffer_->handle_ };
-    callback->Call(handle_, 1, argv);
-    sending_ = false;
-  }
-
-  void
-  Context::SetVideoCallback() {
-    if (!videoCallback_) {
-
-      freenect_set_video_callback(device_, video_callback);
-
-      videoCallback_ = true;
-      if (freenect_set_video_mode(device_, videoMode_) != 0) {
-        ThrowException(Exception::Error(String::New("Error setting Video mode")));
-        return;
-      };
-
-      videoBuffer_ = Buffer::New(videoMode_.bytes);
-      videoBufferPersistentHandle_ = Persistent<Value>::New(videoBuffer_->handle_);
-      if (freenect_set_video_buffer(device_, Buffer::Data(videoBuffer_)) != 0) {
-        ThrowException(Exception::Error(String::New("Error setting Video buffer")));
-      }
-
-
+    Handle<Value> Context::SetVideoCallback(const Arguments& args)
+    {
+        HandleScope scope;
+        GetContext(args)->SetVideoCallback();
+        return Undefined();
     }
 
-    if (freenect_start_video(device_) != 0) {
-      ThrowException(Exception::Error(String::New("Error starting video")));
-      return;
+    void Context::SetVideoCallback()
+    {
+        if (!videoCallback_)
+        {
+            freenect_set_video_callback(device_, video_callback);
+
+            videoCallback_ = true;
+            if (freenect_set_video_mode(device_, videoMode_) != 0)
+            {
+                throw_message("Error setting Video mode");
+                return;
+            }
+
+            videoBuffer_ = Buffer::New(videoMode_.bytes);
+            videoBufferPersistentHandle_ = Persistent<Value>::New(videoBuffer_->handle_);
+            if (freenect_set_video_buffer(device_, Buffer::Data(videoBuffer_)) != 0)
+            {
+                throw_message("Error setting Video buffer");
+            }
+
+        }
+
+        if (freenect_start_video(device_) != 0)
+        {
+            throw_message("Error starting video");
+            return;
+        }
     }
-  }
 
-  Handle<Value>
-  Context::SetVideoCallback(const Arguments& args) {
-    HandleScope scope;
+    void Context::VideoCallback()
+    {
+        sending_ = true;
+        assert(videoBuffer_ != nullptr);
 
-    GetContext(args)->SetVideoCallback();
+        if (videoCallbackSymbol.IsEmpty())
+        {
+            videoCallbackSymbol = NODE_PSYMBOL("videoCallback");
+        }
 
-    return Undefined();
-  }
+        Local<Value> callback_v =handle_->Get(videoCallbackSymbol);
+
+        if (!callback_v->IsFunction())
+        {
+            throw_message("VideoCallback should be a function");
+        }
+
+        Local<Function> callback = Local<Function>::Cast(callback_v);
+
+        Handle<Value> argv[1] = { videoBuffer_->handle_ };
+        callback->Call(handle_, 1, argv);
+        sending_ = false;
+    }
+
 
 
   /********* Depth ****************/
