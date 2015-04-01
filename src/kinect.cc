@@ -40,12 +40,6 @@ namespace
 
 
 namespace kinect {
-
-  Context *
-  Context::GetContext(const Arguments &args) {
-    return ObjectWrap::Unwrap<Context>(args.This());
-  }
-
   /********************************/
   /********* Flow *****************/
   /********************************/
@@ -96,7 +90,7 @@ namespace kinect {
     // = Video                                                             =
     // =====================================================================
 
-    Handle<Value> Context::SetVideoCallback(const Arguments& args)
+    Handle<Value> Context::SetVideoCallback(Arguments const& args)
     {
         HandleScope scope;
         GetContext(args)->SetVideoCallback();
@@ -408,10 +402,17 @@ namespace kinect {
     return Undefined();
    }
 
+    kinect::Context *Context::GetContext(Arguments const&args)
+    {
+        return ObjectWrap::Unwrap<kinect::Context>(args.This());
+    }
+
   void
   Initialize(Handle<Object> target) {
     Context::Initialize(target);
   }
+
+
 
 }
 
