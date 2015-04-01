@@ -251,17 +251,17 @@ namespace kinect {
   Context::Led(const std::string option) {
     freenect_led_options ledCode;
 
-    if (option.compare("off") == 0) {
+    if (option == "off") {
       ledCode = LED_OFF;
-    } else if (option.compare("green") == 0) {
+    } else if (option == "green") {
       ledCode = LED_GREEN;
-    } else if (option.compare("red") == 0) {
+    } else if (option == "red") {
       ledCode = LED_RED;
-    } else if (option.compare("yellow") == 0) {
+    } else if (option == "yellow") {
       ledCode = LED_YELLOW;
-    } else if (option.compare("blink green") == 0) {
+    } else if (option == "blink green") {
       ledCode = LED_BLINK_GREEN;
-    } else if (option.compare("blink red yellow") == 0) {
+    } else if (option == "blink red yellow") {
       ledCode = LED_BLINK_RED_YELLOW;
     } else {
       ThrowException(Exception::Error(String::New("Did not recognize given led code")));
